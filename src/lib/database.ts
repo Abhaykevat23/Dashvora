@@ -4,21 +4,74 @@ import { Pool, PoolConfig, QueryResult } from 'pg';
 
 import { DatabaseConnectionConfig, TableSchema, QueryResultData } from './database-types';
 
+function isVercelEnvironment(): boolean {
+  return !!(
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.NEXT_PUBLIC_VERCEL_ENV
+  );
+}
+
+function parsePostgresUrl(url: string): { host: string; port: string; database: string; username: string; password: string; ssl: boolean } {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname,
+    port: parsed.port || '5432',
+    database: parsed.pathname.replace(/^\//, ''),
+    username: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    ssl: parsed.searchParams.get('sslmode') === 'require' || isVercelEnvironment(),
+  };
+}
+
 export class DatabaseService {
   private pools: Map<string, Pool> = new Map();
   private activeConnections: Map<string, DatabaseConnectionConfig> = new Map();
 
   /**
    * Load default connection configuration from environment variables.
+   * Supports either:
+   *   - NEON_URL (isolated connection string for Neon Postgres)
+   *   - POSTGRES_URL (single connection string, e.g. Vercel Postgres)
+   *   - Individual env vars (POSTGRES_HOST, POSTGRES_PORT, etc.)
    */
   static getDefaultConfig(): DatabaseConnectionConfig {
+    // Prefer NEON_URL first (user-defined), then POSTGRES_URL (Vercel Postgres)
+    const neonUrl = process.env.NEON_URL;
+    if (neonUrl) {
+      const parsed = parsePostgresUrl(neonUrl);
+      return {
+        host: parsed.host,
+        port: parsed.port,
+        database: parsed.database,
+        username: parsed.username,
+        password: parsed.password,
+        ssl: parsed.ssl,
+      };
+    }
+
+    const postgresUrl = process.env.POSTGRES_URL;
+    if (postgresUrl) {
+      const parsed = parsePostgresUrl(postgresUrl);
+      return {
+        host: parsed.host,
+        port: parsed.port,
+        database: parsed.database,
+        username: parsed.username,
+        password: parsed.password,
+        ssl: parsed.ssl,
+      };
+    }
+
+    // Fall back to individual env vars
+    const onVercel = isVercelEnvironment();
     return {
       host: process.env.POSTGRES_HOST || 'localhost',
       port: process.env.POSTGRES_PORT || '5432',
       database: process.env.POSTGRES_DATABASE || 'dashvora',
       username: process.env.POSTGRES_USER || 'postgres',
       password: process.env.POSTGRES_PASSWORD || 'postgres',
-      ssl: process.env.POSTGRES_SSL === 'true',
+      ssl: process.env.POSTGRES_SSL === 'true' || onVercel,
     };
   }
 
