@@ -45,7 +45,7 @@ export interface DashboardStore {
   activeDatasetId: string;
   setActiveDatasetId: (id: string) => void;
   uploadDataset: (name: string, fileContent: string | ArrayBuffer, fileName: string) => Promise<boolean>;
-  deleteDataset: (id: string) => void;
+  deleteDataset: (id: string) => Promise<void>;
   renameDatasetTable: (id: string, newTableName: string) => void;
 
   // Connectors
@@ -690,7 +690,30 @@ export const useDashboardStore = create<DashboardStore>()(
             return false;
           }
         },
-        deleteDataset: (id) => set(state => ({ datasets: state.datasets.filter(d => d.id !== id) })),
+        deleteDataset: async (id) => {
+          const state = get();
+          const dataset = state.datasets.find(d => d.id === id);
+          if (!dataset) return;
+
+          // If it's a server-uploaded dataset, drop the PG table and metadata
+          if (dataset.sourceType === 'server_upload' && dataset.tableName) {
+            try {
+              await fetch('/api/datasets/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tableName: dataset.tableName }),
+              });
+            } catch (err: any) {
+              console.warn('[DashboardStore] Failed to delete server dataset:', err.message);
+            }
+          }
+
+          // Update local state
+          set(state => ({
+            datasets: state.datasets.filter(d => d.id !== id),
+            activeDatasetId: state.activeDatasetId === id ? '' : state.activeDatasetId,
+          }));
+        },
         renameDatasetTable: (id, newTableName) => set(state => ({
           datasets: state.datasets.map(d => {
             if (d.id === id) {

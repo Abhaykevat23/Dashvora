@@ -58,6 +58,9 @@ export default function Sidebar() {
     createNewDashboard
   } = useDashboardStore();
 
+  // Delete confirmation state
+  const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
+  
   // Auth state
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -388,15 +391,16 @@ export default function Sidebar() {
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
-                              {datasets.length > 1 && (
-                                <button
-                                  onClick={() => deleteDataset(ds.id)}
-                                  className="text-zinc-500 hover:text-red-400 p-0.5"
-                                  title="Delete Dataset"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingDatasetId(ds.id);
+                                }}
+                                className="text-zinc-500 hover:text-red-400 p-0.5"
+                                title="Delete Dataset"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                           <span className="text-[10px] font-mono block text-zinc-500 mt-0.5">
@@ -639,6 +643,39 @@ export default function Sidebar() {
           </>
         )}
       </div>
+
+      {/* Delete Dataset Confirmation Modal */}
+      {deletingDatasetId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="glass-panel w-full max-w-sm rounded-xl p-6 border border-white/10 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-400" />
+              Delete Dataset
+            </h3>
+            <p className="text-sm text-zinc-400 mb-6">
+              Are you sure you want to delete <strong className="text-zinc-200">{datasets.find(d => d.id === deletingDatasetId)?.name || 'this dataset'}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => setDeletingDatasetId(null)}
+                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteDataset(deletingDatasetId);
+                  setDeletingDatasetId(null);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-red-500/20 transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload CSV Modal overlay */}
       {showUploadModal && (
